@@ -1,0 +1,19 @@
+# real bank data and your own rules: never in git
+data/
+known_expenses.csv
+!examples/config/known_expenses.csv
+*.ipynb
+
+# local settings (Azure settings live in the Function App)
+local.settings.json
+
+# tools and caches
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+.idea/
+.DS_Store
+.pytest_cache/
+.ruff_cache/
+.python_packages/
+Claude outputs/

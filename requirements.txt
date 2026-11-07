@@ -1,0 +1,16 @@
+# family-budget: runtime dependencies (what Azure Functions installs)
+# Python 3.11
+
+# Phase 1: core logic
+pandas>=3.0,<4
+rdflib>=7,<8         # reads the category tree (data/categories.ttl)
+
+# Phase 5: Azure SQL
+# Microsoft's SQL driver. Its Mac builds need macOS 15+, so only Linux (Azure)
+# installs it; on the Mac the tests use SQLite instead.
+mssql-python; sys_platform == "linux"
+
+# Azure Functions (Phase 3 onwards)
+azure-functions
+azure-identity        # managed identity on Azure, your az login locally: no passwords
+azure-storage-blob    # read processed/, later raw/ and archive/

@@ -1,0 +1,6 @@
+# family-budget: tools for your Mac only (never deployed)
+-r requirements.txt
+
+pytest>=8
+babel>=2.14           # country names in many languages (Unicode CLDR), to build places.ttl
+jupyter              # notebook for exploring data in PyCharm

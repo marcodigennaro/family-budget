@@ -1,0 +1,52 @@
+# On every push: tests and style. On main, if they pass: publish to Azure.
+#
+# GitHub signs in to Azure without a password (OpenID Connect): Azure trusts
+# tokens from this repo's main branch for the identity id-github-deploy.
+# Set up once with: bash scripts/azure.sh github
+name: tests and deploy
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch: # a "Run workflow" button on the Actions tab
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11" # the same as the Function App
+          cache: pip
+      # babel: the places tests build a small tree from CLDR (requirements-dev.txt,
+      # without jupyter, which is only for your Mac)
+      - run: pip install -r requirements.txt -e . pytest ruff "babel>=2.14"
+      - run: ruff format --check .
+      - run: ruff check .
+      - run: pytest -q
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # lets the job ask GitHub for a token Azure trusts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - uses: Azure/functions-action@v1
+        with:
+          app-name: func-family-budget-mdg
+          package: .
+          sku: flexconsumption
+          remote-build: true # Azure installs requirements.txt itself
+          respect-funcignore: true

@@ -1,0 +1,13 @@
+transaction_type,counterparty_iban,keyword,amount,category,type,is_fixed,direction,property
+# FAKE rules for testing on Azure: they match examples/transactions_sample.csv and examples/bnp_export_sample.csv
+,,MY COMPANY SRL,,salary,income,false,in,
+,,OWN SAVINGS,,own accounts,transfer,false,,
+,,LOYER,,rent,spending,true,out,Example flat
+direct_debit,,PARTENA,,health insurance,spending,true,,
+,,PARTENA,,health,spending,false,,
+direct_debit,,PENSION PLAN,,pension plan,saving,true,,
+,,DELHAIZE,,groceries,spending,false,,
+,,CARREFOUR,,groceries,spending,false,,
+,,CONAD,,groceries,spending,false,,
+,,PIZZERIA,,eating out,spending,false,,
+,,SPORT CLUB,,sport,spending,false,,

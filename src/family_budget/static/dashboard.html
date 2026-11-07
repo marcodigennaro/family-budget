@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>family-budget</title>
+<style>
+/* One column of cards: overview first, then groups, properties, explore, upload.
+   Everything is drawn here (SVG): the page loads nothing from other sites. */
+:root {
+  --bg: #f6f7f9; --card: #ffffff; --ink: #17202b; --muted: #5d6b79; --line: #dde3e9;
+  --in: #2f7d55; --out: #b4532a; --accent: #1f6fb2; --soft: #e8f0f8;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #10151b; --card: #171e26; --ink: #e5eaf0; --muted: #98a4b1; --line: #2a333d;
+    --in: #5cc08c; --out: #e8875c; --accent: #6aaee6; --soft: #1b2a39;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 980px; margin: 0 auto; padding: 28px 16px 60px; display: grid; gap: 18px; }
+h1 { margin: 0; font-size: 24px; }
+h2 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+.row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: end; }
+label { display: grid; gap: 2px; font-size: 12px; color: var(--muted); }
+select, input, button { font: inherit; padding: 5px 8px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--card); color: var(--ink); }
+button { background: var(--accent); color: var(--card); border-color: var(--accent); cursor: pointer; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { color: var(--muted); font-weight: 600; }
+td.num, th.num { text-align: right; }
+.pos { color: var(--in); } .neg { color: var(--out); }
+.muted { color: var(--muted); font-size: 13px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.kpi b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
+svg text { fill: var(--muted); font-size: 11px; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+#status { min-height: 1.5em; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>family-budget</h1>
+    <p class="muted" id="status">Loading…</p>
+  </header>
+
+  <section class="card">
+    <h2>Last 12 months</h2>
+    <div class="kpis" id="kpis"></div>
+    <div class="legend"><span><i class="sw" style="background:var(--in)"></i>income</span>
+      <span><i class="sw" style="background:var(--out)"></i>spending (fixed + variable)</span></div>
+    <div class="scroll"><svg id="months" width="100%" height="220" role="img" aria-label="Income and spending per month"></svg></div>
+  </section>
+
+  <section class="card">
+    <div class="row" style="justify-content:space-between">
+      <h2>Spending by group</h2>
+      <label>Year <select id="group-year"></select></label>
+    </div>
+    <div class="scroll"><svg id="groups" width="100%" height="40" role="img" aria-label="Spending by group"></svg></div>
+  </section>
+
+  <section class="card">
+    <h2>Properties: rent received, paid, net</h2>
+    <div class="scroll"><table id="properties"></table></div>
+  </section>
+
+  <section class="card">
+    <h2>Explore transactions</h2>
+    <form class="row" id="explore">
+      <label>Year <select id="f-year"><option value="">any</option></select></label>
+      <label>Group <select id="f-level1"><option value="">any</option></select></label>
+      <label>Category <select id="f-category"><option value="">any</option></select></label>
+      <label>Property <select id="f-property"><option value="">any</option></select></label>
+      <label>Trip <select id="f-trip"><option value="">any</option></select></label>
+      <label>Rows <select id="f-limit"><option>50</option><option>200</option><option>1000</option></select></label>
+      <button type="submit">Show</button>
+    </form>
+    <p class="muted" id="explore-total"></p>
+    <div class="scroll"><table id="rows"></table></div>
+  </section>
+
+  <section class="card">
+    <h2>Upload a bank export</h2>
+    <form class="row" id="upload">
+      <label>CSV file from BNP or Belfius <input type="file" id="file" accept=".csv"></label>
+      <button type="submit">Upload</button>
+    </form>
+    <p class="muted" id="upload-result">The new rows appear here about a minute after the upload.</p>
+  </section>
+</main>
+
+<script>
+"use strict";
+// Data comes from the same address as this page: <page>/data/<resource>.
+const BASE = location.pathname.endsWith("/") ? location.pathname : location.pathname + "/";
+const eur = new Intl.NumberFormat("en-BE", { style: "currency", currency: "EUR" });
+const $ = (id) => document.getElementById(id);
+const SVG = "http://www.w3.org/2000/svg";
+
+async function get(resource) {
+  const response = await fetch(BASE + "data/" + resource, { credentials: "same-origin" });
+  if (response.status === 401) {  // signed out (session expired): reload, the server
+    location.reload();             // sends you to the right sign-in page
+  }
+  if (!response.ok) throw new Error((await response.json()).error || response.statusText);
+  return response.json();
+}
+
+function el(tag, text, cls) {           // always text, never HTML
+  const node = document.createElement(tag);
+  if (text !== undefined && text !== null) node.textContent = text;
+  if (cls) node.className = cls;
+  return node;
+}
+
+function svgEl(tag, attrs, text) {
+  const node = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function fillTable(table, columns, rows) {
+  table.replaceChildren();
+  const head = el("tr");
+  for (const c of columns) head.append(el("th", c.label, c.num ? "num" : ""));
+  table.append(head);
+  for (const row of rows) {
+    const tr = el("tr");
+    for (const c of columns) {
+      const value = row[c.key];
+      const text = c.money ? eur.format(value) : value ?? "";
+      const cls = [c.num ? "num" : "", c.money ? (value < 0 ? "neg" : "pos") : ""].join(" ");
+      tr.append(el("td", text, cls));
+    }
+    table.append(tr);
+  }
+}
+
+function fillSelect(select, values) {
+  for (const v of values) select.append(new Option(v, v));
+}
+
+// --- overview ------------------------------------------------------------------
+function drawMonths(months) {
+  const svg = $("months");
+  svg.replaceChildren();
+  const width = Math.max(svg.clientWidth || 600, 360), height = 220, pad = 28;
+  const max = Math.max(1, ...months.map((m) => Math.max(m.income, m.fixed_spending + m.variable_spending)));
+  const slot = (width - pad) / Math.max(months.length, 1), bar = Math.max(4, slot / 3);
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  months.forEach((m, i) => {
+    const x = pad + i * slot, base = height - 22;
+    const scale = (v) => (Math.max(v, 0) / max) * (base - 10);  // refunds can make a month negative
+    const spend = m.fixed_spending + m.variable_spending;
+    svg.append(svgEl("rect", { x, y: base - scale(m.income), width: bar, height: scale(m.income), style: "fill:var(--in)" }));
+    svg.append(svgEl("rect", { x: x + bar + 2, y: base - scale(spend), width: bar, height: scale(spend), style: "fill:var(--out)" }));
+    const every = slot < 40 ? 2 : 1;  // narrow screens: label every second month
+    if (i % every === 0) svg.append(svgEl("text", { x, y: height - 6 }, m.month.slice(2)));
+    const tip = svgEl("rect", { x, y: 0, width: slot, height: base, style: "fill:transparent" });
+    tip.append(svgEl("title", {}, `${m.month}: income ${eur.format(m.income)}, spending ${eur.format(spend)}`));
+    svg.append(tip);
+  });
+}
+
+function showKpis(months) {
+  const sum = (k) => months.reduce((s, m) => s + m[k], 0);
+  const items = [
+    ["Income", sum("income")],
+    ["Fixed spending", sum("fixed_spending")],
+    ["Variable spending", sum("variable_spending")],
+    ["Saving", sum("saving")],
+    ["Net", sum("net")],
+  ];
+  $("kpis").replaceChildren(...items.map(([label, value]) => {
+    const box = el("div", null, "kpi");
+    box.append(el("b", eur.format(value)), el("span", label, "muted"));
+    return box;
+  }));
+}
+
+async function drawGroups() {
+  const year = $("group-year").value;
+  const groups = await get("groups" + (year ? "?year=" + encodeURIComponent(year) : ""));
+  const svg = $("groups"), rowH = 24, labelW = 140;
+  const width = Math.max(svg.clientWidth || 600, 360);
+  const max = Math.max(1, ...groups.map((g) => g.spending));
+  svg.replaceChildren();
+  svg.setAttribute("height", groups.length * rowH + 8);
+  svg.setAttribute("viewBox", `0 0 ${width} ${groups.length * rowH + 8}`);
+  groups.forEach((g, i) => {
+    const y = i * rowH + 4, w = (g.spending / max) * (width - labelW - 110);
+    svg.append(svgEl("text", { x: 0, y: y + 14 }, g.group));
+    svg.append(svgEl("rect", { x: labelW, y, width: Math.max(w, 1), height: rowH - 8, rx: 3, style: "fill:var(--accent)" }));
+    svg.append(svgEl("text", { x: labelW + w + 6, y: y + 14 }, eur.format(g.spending)));
+  });
+}
+
+// --- explore -------------------------------------------------------------------
+async function explore(event) {
+  if (event) event.preventDefault();
+  const params = new URLSearchParams();
+  for (const name of ["year", "level1", "category", "property", "trip", "limit"]) {
+    const value = $("f-" + name).value;
+    if (value) params.set(name, value);
+  }
+  const rows = await get("transactions?" + params);
+  const total = rows.reduce((s, r) => s + r.amount, 0);
+  $("explore-total").textContent = `${rows.length} rows shown, total ${eur.format(total)}`;
+  fillTable($("rows"), [
+    { key: "date", label: "Date" },
+    { key: "amount", label: "Amount", num: true, money: true },
+    { key: "counterparty", label: "Counterparty" },
+    { key: "category", label: "Category" },
+    { key: "level1", label: "Group" },
+    { key: "property", label: "Property" },
+    { key: "trip", label: "Trip" },
+  ], rows);
+}
+
+// --- upload --------------------------------------------------------------------
+async function upload(event) {
+  event.preventDefault();
+  const file = $("file").files[0];
+  const result = $("upload-result");
+  if (!file) { result.textContent = "Choose a CSV file first."; return; }
+  result.textContent = "Uploading…";
+  const response = await fetch(BASE + "upload?name=" + encodeURIComponent(file.name), {
+    method: "POST", body: file, credentials: "same-origin",
+  });
+  const body = await response.json().catch(() => ({}));
+  result.textContent = response.ok
+    ? `Received as ${body.accepted}. Reload this page in about a minute.`
+    : `Not uploaded: ${body.error || response.statusText}`;
+}
+
+// --- start ---------------------------------------------------------------------
+async function start() {
+  try {
+    const months = (await get("months")).slice(-12);
+    showKpis(months);
+    drawMonths(months);
+    const years = [...new Set(months.map((m) => m.month.slice(0, 4)))].reverse();
+    fillSelect($("group-year"), years);
+    fillSelect($("f-year"), years);
+    await drawGroups();
+    const [groups, categories, properties, trips] = await Promise.all([
+      get("groups"), get("categories"), get("properties"), get("trips"),
+    ]);
+    fillSelect($("f-level1"), groups.map((g) => g.group));
+    fillSelect($("f-category"), categories.map((c) => c.category).sort());
+    fillSelect($("f-property"), properties.map((p) => p.property));
+    fillSelect($("f-trip"), trips.map((t) => t.trip));
+    fillTable($("properties"), [
+      { key: "property", label: "Property" },
+      { key: "received", label: "Received", num: true, money: true },
+      { key: "paid", label: "Paid", num: true, money: true },
+      { key: "net", label: "Net", num: true, money: true },
+    ], properties.map((p) => ({ ...p, paid: -p.paid })));
+    await explore();
+    $("status").textContent = `Data up to ${months.at(-1)?.month ?? "—"}.`;
+  } catch (error) {
+    $("status").textContent = "Could not load the data: " + error.message;
+  }
+}
+
+$("group-year").addEventListener("change", drawGroups);
+$("explore").addEventListener("submit", explore);
+$("upload").addEventListener("submit", upload);
+start();
+</script>
+</body>
+</html>

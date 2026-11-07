@@ -1,0 +1,9 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "AzureWebJobsStorage": "",
+    "STORAGE_ACCOUNT_URL": "https://stfamilybudgetmdg.blob.core.windows.net",
+    "TRANSACTIONS_URL": "https://stfamilybudgetmdg.blob.core.windows.net/processed/transactions.csv"
+  }
+}

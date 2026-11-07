@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "family-budget"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["pandas>=3.0,<4", "rdflib>=7,<8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]          # code lives in src/family_budget/
+
+[tool.setuptools.package-data]
+family_budget = ["static/*.html"]   # the dashboard page
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--import-mode=importlib"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "ISC"]
