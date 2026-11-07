@@ -1,7 +1,7 @@
 """Phase 4: process a bank export that arrives as bytes (e.g. dropped in raw/).
 
-On your Mac the folder says which bank a file comes from (data/BNP/,
-data/belfius_common/). In the cloud every export lands in the same inbox,
+On your Mac the folder says which bank a file comes from (data/BNP/<account>/,
+data/BELFIUS/<account>/). In the cloud every export lands in the same inbox,
 so the code looks at the beginning of the file instead.
 """
 

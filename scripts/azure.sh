@@ -424,15 +424,24 @@ github() {
   grant "$principal" ServicePrincipal "Website Contributor" "$app_id"
 
   say "2/3 Trust GitHub tokens from $REPO, branch main only"
-  if az identity federated-credential show -g "$RG" --identity-name "$GH_ID" \
-    -n github-main -o none 2>/dev/null; then
-    step "already trusted"
-  else
-    long "trust repo:$REPO:ref:refs/heads/main" \
-      az identity federated-credential create -g "$RG" --identity-name "$GH_ID" \
-      -n github-main --issuer https://token.actions.githubusercontent.com \
-      --subject "repo:$REPO:ref:refs/heads/main" --audiences api://AzureADTokenExchange -o none
+  # The subject must match the token exactly. Newer repos send their IDs too:
+  #   repo:owner@OWNER_ID/name@REPO_ID:ref:refs/heads/main
+  # (shown as "subject claim" in a failed azure/login step). Override with
+  #   GH_SUBJECT='repo:...' bash scripts/azure.sh github
+  local subject=${GH_SUBJECT:-}
+  if [[ -z "$subject" ]] && command -v gh >/dev/null && gh auth status >/dev/null 2>&1; then
+    local ids
+    ids=$(gh api "repos/$REPO" --jq '"\(.owner.id) \(.id)"')
+    subject="repo:${REPO%%/*}@${ids% *}/${REPO#*/}@${ids#* }:ref:refs/heads/main"
   fi
+  subject=${subject:-"repo:$REPO:ref:refs/heads/main"}
+  local verb=create
+  az identity federated-credential show -g "$RG" --identity-name "$GH_ID" \
+    -n github-main -o none 2>/dev/null && verb=update
+  long "trust $subject" \
+    az identity federated-credential "$verb" -g "$RG" --identity-name "$GH_ID" \
+    -n github-main --issuer https://token.actions.githubusercontent.com \
+    --subject "$subject" --audiences api://AzureADTokenExchange -o none
 
   say "3/3 Tell GitHub which identity to use (IDs, not secrets)"
   local sub

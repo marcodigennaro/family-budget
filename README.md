@@ -14,10 +14,34 @@ pip install -r requirements-dev.txt
 pip install -e .
 ```
 
+## Real data and fake data
+
+Your real exports and rules live **outside** the project. Point to them with one
+setting (in `~/.zshrc` to keep it):
+
+```bash
+export FAMILY_BUDGET_DATA=~/Documents/family-budget-data
+```
+
+Without it, `data/` in the project is used. Fill that with fake data, the same shape
+as the real folder (two banks, three accounts, three years, trips, rent, a
+renovation, ~4% uncategorised):
+
+```bash
+python -m family_budget.fake              # writes data/ (only if empty or fake)
+python -m family_budget.fake --seed 7 --months 12 --start 2025-01
+unset FAMILY_BUDGET_DATA; python -m family_budget   # run on the fake data
+```
+
+The generator refuses a folder it did not make (`FAKE_DATA.txt` marks its own).
+
 ## Monthly routine
 
 1. Export the month as CSV from each bank.
-2. Put the files in `data/BNP/` or `data/belfius_common/`. Overlaps are fine: duplicates are removed.
+2. Put each file in its account's folder: `data/BNP/<account>/` or
+   `data/BELFIUS/<account>/`, the folder named after the IBAN (`BE00000000000001`;
+   spaces or `_` are fine). Overlaps are fine: duplicates are removed. A file in the
+   wrong account's folder is reported when you run step 3.
 3. Run `python -m family_budget`.
 4. Open `data/processed/uncategorised.csv`. For anything that repeats, add a line to
    `data/known_expenses.csv` and run again.
@@ -27,6 +51,7 @@ pip install -e .
 
 | Path | Content |
 |---|---|
+| `data/BNP/<account>/*.csv`, `data/BELFIUS/<account>/*.csv` | Bank exports, one folder per account |
 | `data/known_expenses.csv` | Recurring rules, edited by hand |
 | `data/exceptional.csv` | One-off transactions (flats, company, moves) |
 | `data/categories.ttl` | Category tree (ontology), edited by hand |
@@ -35,7 +60,8 @@ pip install -e .
 | `src/family_budget/` | Code: load, normalize, classify, summarize |
 | `tests/` | `pytest`, fake data only |
 
-`data/` is in `.gitignore`: bank data never leaves your machine.
+Paths are shown as `data/`: with `FAMILY_BUDGET_DATA` set, read them inside that
+folder. `data/` is in `.gitignore` either way: bank data never goes to GitHub.
 
 ## Normalized table
 
@@ -266,7 +292,7 @@ Only after the stranger test (another account gets 403):
 bash scripts/azure.sh allow marcodigennaro@outlook.com   # add a name, keep the others
 bash scripts/azure.sh reset          # delete the fake processed table (asks first)
 bash scripts/azure.sh config         # data/ rules and categories.ttl -> config/
-bash scripts/azure.sh upload data/BNP/<export>.csv   # or the dashboard's Upload button
+bash scripts/azure.sh upload data/BNP/<account>/<export>.csv   # or the Upload button
 ```
 
 `upload` and `config` refuse anything from `data/` until the login is on. After a

@@ -1,6 +1,6 @@
 """Run the whole pipeline:  python -m family_budget
 
-1. load:       read every CSV in the bank folders (bnp.py, belfius.py)
+1. load:       read every CSV in data/BNP/<account>/ and data/BELFIUS/<account>/
 2. normalize:  one English table, duplicates dropped (normalize.py)
 3. classify:   exceptional.csv, then known_expenses.csv; first match wins
 4. ontology:   level1/level2 from the category tree, data/categories.ttl (ontology.py)
@@ -10,6 +10,9 @@
 """
 
 from __future__ import annotations
+
+import re
+from pathlib import Path
 
 import pandas as pd
 
@@ -37,16 +40,44 @@ SOURCES = [
 ]
 
 
-def load_all() -> pd.DataFrame:
+def find_exports(bank_folder: Path) -> list[Path]:
+    """Every CSV in the bank's account folders (or directly in the bank folder)."""
+    if not bank_folder.is_dir():
+        return []
+    return sorted(p for p in bank_folder.rglob("*") if p.suffix.lower() == ".csv")
+
+
+_ACCOUNT = re.compile(r"[A-Z]{2}\d{2}[A-Z0-9]{8,30}")  # an IBAN, once cleaned up
+
+
+def account_problem(path: Path, table: pd.DataFrame) -> str | None:
+    """A message if the file is in another account's folder, else None.
+
+    Only folders named after an account are checked ("BE00 0000 0000 0001",
+    "BE00_0000_0000_0001"); a folder called "joint" or "BNP" is left alone.
+    """
+    folder = re.sub(r"[^A-Z0-9]", "", path.parent.name.upper())
+    if not _ACCOUNT.fullmatch(folder):
+        return None
+    accounts = set(table["account"].dropna())
+    if accounts and accounts != {folder}:
+        return f"{path.name} is for {', '.join(sorted(accounts))}, not {folder}"
+    return None
+
+
+def load_all(sources=None) -> pd.DataFrame:
     tables = []
-    for folder, load, normalize in SOURCES:
-        for path in sorted(folder.glob("*.csv")):
+    for folder, load, normalize in sources or SOURCES:
+        for path in find_exports(folder):
             try:
                 table = normalize(load(path))
             except ValueError as error:
                 print(f"  skipped {path.name}: {error}")
                 continue
-            print(f"  {path.parent.name}/{path.name}: {len(table)} rows")
+            problem = account_problem(path, table)
+            if problem:
+                print(f"  WARNING {problem}: move it to the right folder")
+            print(f"  {path.relative_to(folder.parent)}: {len(table)} rows")
             tables.append(table)
     if not tables:
         raise SystemExit("No CSV files found. Check the folders in config.py.")

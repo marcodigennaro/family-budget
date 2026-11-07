@@ -96,8 +96,8 @@ def test_header_far_down_the_file_is_not_searched():
 def test_every_real_export_is_recognised():
     from family_budget.config import BELFIUS_DIR, BNP_DIR
 
-    files = [(p, "bnp") for p in BNP_DIR.glob("*.csv")]
-    files += [(p, "belfius") for p in BELFIUS_DIR.glob("*.csv")]
+    files = [(p, "bnp") for p in BNP_DIR.rglob("*.csv")]
+    files += [(p, "belfius") for p in BELFIUS_DIR.rglob("*.csv")]
     if not files:
         pytest.skip("no real exports in data/")
     for path, bank in files:
